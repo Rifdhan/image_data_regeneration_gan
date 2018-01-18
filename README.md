@@ -24,3 +24,20 @@ python test.py --model_path "/path/to/model.npz" --input_path "/path/to/input/im
 ```
 Note: you may omit the output_path argument and the results will be displayed in a window instead.
 
+### Image Manipulation
+
+To convert images between formats:
+```
+convert input.jpg output.png
+```
+
+To change image resolution:
+```
+mogrify -resize 50% image.jpg
+```
+
+To compress to specified JPEG compression level:
+```
+convert input.png -quality 10 output.jpg
+```
+
