@@ -31,10 +31,6 @@ logging.getLogger("").addHandler(logging.StreamHandler())
 logging.info("Using configuration:")
 logging.info(args)
 
-# Determine logging and nodel save intervals
-nExamplesBetweenLogs = args.batch_size * 5
-nExamplesBetweenModelSaves = args.batch_size * 500
-
 # Determine computation engine (CPU or GPU)
 useGpu = args.use_gpu
 if useGpu >= 0:
@@ -46,6 +42,14 @@ if useGpu >= 0:
 else:
     logging.info("Using CPU for compute")
     xp = numpy
+
+# Determine logging and nodel save intervals (more frequent if training on CPU since it's slower)
+if useGpu >= 0:
+    nExamplesBetweenLogs = args.batch_size * 10
+    nExamplesBetweenModelSaves = args.batch_size * 1000
+else:
+    nExamplesBetweenLogs = args.batch_size * 5
+    nExamplesBetweenModelSaves = args.batch_size * 500
 
 # Load training dataset
 trainDataPaths = glob.glob(args.train_data_paths)
@@ -163,5 +167,7 @@ for example in iterator:
     # Determine if we should save the current model data
     if nExamplesSeen % nExamplesBetweenModelSaves == 0:
         # Save generator model data
-        chainer.serializers.save_npz(os.path.join(outputDirectory, "generator_{}_examples.npz".format(nExamplesSeen)), generator)
+        savePath = os.path.join(outputDirectory, "generator_{}_examples.npz".format(nExamplesSeen))
+        logging.info("saving trained model: {}".format(savePath))
+        chainer.serializers.save_npz(savePath, generator)
 
