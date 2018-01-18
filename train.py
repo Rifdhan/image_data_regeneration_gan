@@ -5,6 +5,7 @@ import chainer
 import numpy
 import cupy
 import glob
+import time
 
 import dataset
 import models
@@ -76,6 +77,8 @@ totalLossGenerator, totalLossGeneratorAdversarial, totalLossGeneratorContent, to
 
 # Iterate through training data
 logging.info("Beginning training")
+startTime = time.time()
+lastIntervalEndTime = startTime
 nExamplesSeen = 0
 for example in iterator:
     # example is of shape [batch_size, 2, channels, x, y]
@@ -138,12 +141,21 @@ for example in iterator:
 
     # Determine if we should log some statistics
     if nExamplesSeen % nExamplesBetweenLogs == 0:
+        # Update timing parameters
+        currentTime = time.time()
+        elapsedTimeTotal = currentTime - startTime
+        elapsedTimeTotalString = time.strftime("%H:%M:%S", time.gmtime(elapsedTimeTotal))
+        elapsedTimeForInterval = currentTime - lastIntervalEndTime
+        elapsedTimeForIntervalString = time.strftime("%H:%M:%S", time.gmtime(elapsedTimeForInterval))
+        lastIntervalEndTime = currentTime
+        
         # Log average statistics for the last bunch of examples
         logging.info("examples seen: {}".format(nExamplesSeen))
         logging.info("  loss generator (total): {}".format(totalLossGenerator / nExamplesSeen))
         logging.info("    loss generator (adversarial): {}".format(totalLossGeneratorAdversarial / nExamplesSeen))
         logging.info("    loss generator (mean squared error): {}".format(totalLossGeneratorContent / nExamplesSeen))
         logging.info("  loss discriminator: {}".format(totalLossDiscriminator / nExamplesSeen))
+        logging.info("  total time elapsed: {} ({} this interval)".format(elapsedTimeTotalString, elapsedTimeForIntervalString))
         
         # Reset accumulators for the next bunch
         totalLossGenerator, totalLossGeneratorAdversarial, totalLossGeneratorContent, totalLossDiscriminator = 0, 0, 0, 0
