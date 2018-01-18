@@ -33,7 +33,8 @@ class Generator(chainer.Chain):
         )
 
     def __call__(self, x: chainer.Variable):
-        h = first = chainer.functions.relu(self.first(x))
+        h = self.first(x)
+        h = first = chainer.functions.relu(h)
 
         with chainer.using_config("test", False):
             h = self.res1(h)

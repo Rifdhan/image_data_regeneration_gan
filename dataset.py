@@ -1,12 +1,10 @@
 import os
 import six
-import numpy
 import cv2
 import random
+import chainer
 from PIL import Image
 from chainer.dataset import dataset_mixin
-
-import matplotlib.pyplot as plt
 
 
 class ImageDataset(dataset_mixin.DatasetMixin):
@@ -21,7 +19,7 @@ class ImageDataset(dataset_mixin.DatasetMixin):
     def __len__(self):
         return len(self._dataPaths)
 
-    def get_example(self, i) -> Image:
+    def get_example(self, i):
         # Open image at specified index
         path = os.path.join(self._pathRoot, self._dataPaths[i])
         image = Image.open(path)
@@ -34,19 +32,20 @@ class ImageDataset(dataset_mixin.DatasetMixin):
 
 
 class ResizedImageDataset(dataset_mixin.DatasetMixin):
-    def __init__(self, dataPaths, pathRoot, resizeTo):
+    def __init__(self, xp, dataPaths, pathRoot, resizeTo):
+        self._xp = xp
         self.images = ImageDataset(dataPaths=dataPaths, pathRoot=pathRoot, resizeTo=resizeTo)
 
     def __len__(self):
         return len(self.images)
 
-    def get_example(self, i) -> numpy.ndarray:
+    def get_example(self, i):
         # Get example at specified index
-        image = numpy.array(self.images[i])
+        image = self._xp.array(self.images[i])
         
         # If monochrome, duplicate single channel 3 times to get RGB
         if len(image.shape) == 2:
-            image = numpy.dstack((image, image, image))
+            image = self._xp.dstack((image, image, image))
         
         # Transform data from (x, y, channels) to (channels, x, y)
         image_data = image.transpose(2, 0, 1)
@@ -59,15 +58,17 @@ class ResizedImageDataset(dataset_mixin.DatasetMixin):
 
 
 class PreprocessedImageDataset(dataset_mixin.DatasetMixin):
-    def __init__(self, dataPaths, pathRoot=".", targetSize=96, resizeTo=None, dtype=numpy.float32):
-        self.resizedImages = ResizedImageDataset(dataPaths=dataPaths, pathRoot=pathRoot, resizeTo=resizeTo)
-        self._dtype = dtype
+    def __init__(self, xp, useGpu, dataPaths, pathRoot=".", targetSize=96, resizeTo=None):
+        self._xp = xp
+        self._useGpu = useGpu
+        self.resizedImages = ResizedImageDataset(xp=xp, dataPaths=dataPaths, pathRoot=pathRoot, resizeTo=resizeTo)
+        self._dtype = xp.float32
         self.targetSize = targetSize
 
     def __len__(self):
         return len(self.resizedImages)
 
-    def get_example(self, i) -> numpy.ndarray:
+    def get_example(self, i):
         # Get indicated image
         originalImage = self.resizedImages[i]
         
@@ -81,20 +82,20 @@ class PreprocessedImageDataset(dataset_mixin.DatasetMixin):
         croppedOriginal = originalImage[:, cropStartX:cropEndX, cropStartY:cropEndY]
         
         # Compress image to JPEG
-        result, encodedImage = cv2.imencode('.jpg', croppedOriginal.transpose(1, 2, 0), [int(cv2.IMWRITE_JPEG_QUALITY), 10])
-        decodedImage = cv2.imdecode(encodedImage, 1)
-        croppedCompressed = decodedImage.transpose(2, 0, 1)
+        if self._useGpu >= 0:
+            croppedOriginalCpu = chainer.cuda.to_cpu(croppedOriginal)
+            result, encodedImage = cv2.imencode('.jpg', croppedOriginalCpu.transpose(1, 2, 0), [int(cv2.IMWRITE_JPEG_QUALITY), 10])
+            decodedImage = cv2.imdecode(encodedImage, 1)
+            croppedCompressedCpu = decodedImage.transpose(2, 0, 1)
+            croppedCompressed = chainer.cuda.to_gpu(croppedCompressedCpu, device=0)
+        else:
+            result, encodedImage = cv2.imencode('.jpg', croppedOriginal.transpose(1, 2, 0), [int(cv2.IMWRITE_JPEG_QUALITY), 10])
+            decodedImage = cv2.imdecode(encodedImage, 1)
+            croppedCompressed = decodedImage.transpose(2, 0, 1)
         
         # Convert to desired data type and return the example pairing
-        croppedOriginal = numpy.asarray(croppedOriginal, dtype=self._dtype)
-        croppedCompressed = numpy.asarray(croppedCompressed, dtype=self._dtype)
+        croppedOriginal = self._xp.asarray(croppedOriginal, dtype=self._dtype)
+        croppedCompressed = self._xp.asarray(croppedCompressed, dtype=self._dtype)
         
-        # Display images for debugging if desired
-        debug = False
-        if debug:
-            plt.imshow(croppedOriginal.transpose(1, 2, 0))
-            plt.show()
-            plt.imshow(croppedCompressed.transpose(1, 2, 0))
-            plt.show()
         return croppedCompressed, croppedOriginal
 

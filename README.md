@@ -6,18 +6,16 @@ Adapted from superresolution model: https://github.com/Hi-king/superresolution_g
 ## Training Without GPU
 
 ```
-python train.py --train_data_paths "/path/to/images/*.jpg" --model_output_path "/path/to/trained/model/output"
+python train.py --train_data_paths "/path/to/images/*.jpg" --model_output_path "/path/to/save/trained/models"
 ```
 Note: the output directory must not exist, it will be created during runtime.
 
 ## Training With GPU
 
-GPU support coming soon!
-
 ```
-python train.py --train_data_paths "/path/to/images/*.jpg" --model_output_path "/path/to/model/output" --use_gpu=0
+python train.py --train_data_paths "/path/to/images/*.jpg" --model_output_path "/path/to/save/trained/models" --use_gpu=0
 ```
-Note: cupy and cuDNN must be installed and set up. You will need to identify your GPU device ID (usually guess and check works fine). In this example it is `0`.
+Note: cupy must be installed and set up. You will need to identify your GPU device ID. In this example, it is 0. You may simply try numbers from 0 upwards until one works.
 
 ### Testing
 

@@ -3,6 +3,7 @@ import os
 import argparse
 import chainer
 import numpy
+import cupy
 import glob
 
 import dataset
@@ -13,6 +14,7 @@ import models
 parser = argparse.ArgumentParser()
 parser.add_argument("--train_data_paths", required=True)
 parser.add_argument("--model_output_path", required=True)
+parser.add_argument("--use_gpu", type=int, default=-1)
 parser.add_argument("--batch_size", type=int, default=16)
 parser.add_argument("--loss_adversarial_coefficient", type=float, default=0.00001)
 parser.add_argument("--loss_mse_coefficient", type=float, default=0.0001)
@@ -32,26 +34,38 @@ logging.info(args)
 nExamplesBetweenLogs = args.batch_size * 5
 nExamplesBetweenModelSaves = args.batch_size * 500
 
-# Determine computation engine
-# TODO add GPU support
-xp = numpy
+# Determine computation engine (CPU or GPU)
+useGpu = args.use_gpu
+if useGpu >= 0:
+    logging.info("Using GPU with ID {} for compute".format(useGpu))
+    logging.info("  cuda support enabled: {}".format(chainer.cuda.available))
+    logging.info("  cudnn support enabled: {}".format(chainer.cuda.cudnn_enabled))
+    chainer.cuda.get_device(useGpu).use()
+    xp = chainer.cuda.cupy
+else:
+    logging.info("Using CPU for compute")
+    xp = numpy
 
 # Load training dataset
 trainDataPaths = glob.glob(args.train_data_paths)
-trainDataset = dataset.PreprocessedImageDataset(dataPaths=trainDataPaths, targetSize=96, resizeTo=(300, 300))
+trainDataset = dataset.PreprocessedImageDataset(xp=xp, useGpu=useGpu, dataPaths=trainDataPaths, targetSize=96, resizeTo=(300, 300))
 
 # Create iterator to step through training data
-iterator = chainer.iterators.MultiprocessIterator(trainDataset, batch_size=args.batch_size, repeat=True, shuffle=True)
+iterator = chainer.iterators.SerialIterator(trainDataset, batch_size=args.batch_size, repeat=True, shuffle=True)
 
 # Create generator network
 generator = models.Generator()
 generatorOptimizer = chainer.optimizers.Adam()
 generatorOptimizer.setup(generator)
+if useGpu >= 0:
+    generator.to_gpu()
 
 # Create discriminator network
 discriminator = models.Discriminator()
 discriminatorOptimizer = chainer.optimizers.Adam()
 discriminatorOptimizer.setup(discriminator)
+if useGpu >= 0:
+    discriminator.to_gpu()
 
 # Determine coefficients for measuring loss
 lossMseCoefficient = args.loss_mse_coefficient
@@ -64,9 +78,13 @@ totalLossGenerator, totalLossGeneratorAdversarial, totalLossGeneratorContent, to
 logging.info("Beginning training")
 nExamplesSeen = 0
 for example in iterator:
-    # Extract training data from example
-    trainInput = chainer.Variable(xp.array([item[0] for item in example]))
-    trainTarget = chainer.Variable(xp.array([item[1] for item in example]))
+    # example is of shape [batch_size, 2, channels, x, y]
+    # And of types [list, tuple, xp.array, xp.array, xp.array)
+    # We want to split on the second axis to get two arrays of shape [batch_size, channels, x, y]
+    trainInput = xp.stack([item[0] for item in example], axis=3).transpose(3, 0, 1, 2)
+    trainTarget = xp.stack([item[1] for item in example], axis=3).transpose(3, 0, 1, 2)
+    trainInput = chainer.Variable(trainInput)
+    trainTarget = chainer.Variable(trainTarget)
     
     # Get generator output for this example
     trainOutput = generator(trainInput)
