@@ -58,9 +58,10 @@ class ResizedImageDataset(dataset_mixin.DatasetMixin):
 
 
 class PreprocessedImageDataset(dataset_mixin.DatasetMixin):
-    def __init__(self, xp, useGpu, dataPaths, pathRoot=".", targetSize=96, resizeTo=None):
+    def __init__(self, xp, useGpu, jpegQuality, dataPaths, pathRoot=".", targetSize=96, resizeTo=None):
         self._xp = xp
         self._useGpu = useGpu
+        self._jpegQuality = jpegQuality
         self.resizedImages = ResizedImageDataset(xp=xp, dataPaths=dataPaths, pathRoot=pathRoot, resizeTo=resizeTo)
         self._dtype = xp.float32
         self.targetSize = targetSize
@@ -84,12 +85,12 @@ class PreprocessedImageDataset(dataset_mixin.DatasetMixin):
         # Compress image to JPEG
         if self._useGpu >= 0:
             croppedOriginalCpu = chainer.cuda.to_cpu(croppedOriginal)
-            result, encodedImage = cv2.imencode('.jpg', croppedOriginalCpu.transpose(1, 2, 0), [int(cv2.IMWRITE_JPEG_QUALITY), 10])
+            result, encodedImage = cv2.imencode('.jpg', croppedOriginalCpu.transpose(1, 2, 0), [int(cv2.IMWRITE_JPEG_QUALITY), self._jpegQuality])
             decodedImage = cv2.imdecode(encodedImage, 1)
             croppedCompressedCpu = decodedImage.transpose(2, 0, 1)
             croppedCompressed = chainer.cuda.to_gpu(croppedCompressedCpu, device=0)
         else:
-            result, encodedImage = cv2.imencode('.jpg', croppedOriginal.transpose(1, 2, 0), [int(cv2.IMWRITE_JPEG_QUALITY), 10])
+            result, encodedImage = cv2.imencode('.jpg', croppedOriginal.transpose(1, 2, 0), [int(cv2.IMWRITE_JPEG_QUALITY), self._jpegQuality])
             decodedImage = cv2.imdecode(encodedImage, 1)
             croppedCompressed = decodedImage.transpose(2, 0, 1)
         

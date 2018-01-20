@@ -16,6 +16,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--train_data_paths", required=True)
 parser.add_argument("--model_output_path", required=True)
 parser.add_argument("--use_gpu", type=int, default=-1)
+parser.add_argument("--jpeg_quality", type=int, default=10)
 parser.add_argument("--batch_size", type=int, default=16)
 parser.add_argument("--loss_adversarial_coefficient", type=float, default=0.00001)
 parser.add_argument("--loss_mse_coefficient", type=float, default=0.0001)
@@ -43,7 +44,7 @@ else:
     logging.info("Using CPU for compute")
     xp = numpy
 
-# Determine logging and nodel save intervals (more frequent if training on CPU since it's slower)
+# Determine logging and model save intervals (more frequent if training on CPU since it's slower)
 if useGpu >= 0:
     nExamplesBetweenLogs = args.batch_size * 10
     nExamplesBetweenModelSaves = args.batch_size * 1000
@@ -51,9 +52,15 @@ else:
     nExamplesBetweenLogs = args.batch_size * 5
     nExamplesBetweenModelSaves = args.batch_size * 500
 
+# Determine JPEG compression model to use
+jpegQuality = args.jpeg_quality
+if jpegQuality < 1 or jpegQuality > 100:
+    logging.info("Invalid JPEG quality argument: {}; please enter a value between 1 and 100 (inclusively)".format(jpegQuality))
+    exit(-1)
+
 # Load training dataset
 trainDataPaths = glob.glob(args.train_data_paths)
-trainDataset = dataset.PreprocessedImageDataset(xp=xp, useGpu=useGpu, dataPaths=trainDataPaths, targetSize=96, resizeTo=(300, 300))
+trainDataset = dataset.PreprocessedImageDataset(xp=xp, useGpu=useGpu, jpegQuality=jpegQuality, dataPaths=trainDataPaths, targetSize=96, resizeTo=(300, 300))
 
 # Create iterator to step through training data
 iterator = chainer.iterators.SerialIterator(trainDataset, batch_size=args.batch_size, repeat=True, shuffle=True)
