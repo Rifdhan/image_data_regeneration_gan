@@ -24,11 +24,10 @@ chainer.serializers.load_npz(args.model_path, generator)
 
 # Load image from file
 inputImage = numpy.array(Image.open(args.input_path))
-        
+
 # If monochrome, duplicate single channel 3 times to get RGB
-# TODO: necessary?
-#if len(image.shape) == 2:
-#    image = numpy.dstack((image, image, image))
+if len(inputImage.shape) == 2:
+    inputImage = numpy.dstack((inputImage, inputImage, inputImage))
 
 # If alpha channel present, trim it out
 if inputImage.shape[2] == 4:
