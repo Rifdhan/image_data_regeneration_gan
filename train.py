@@ -58,9 +58,17 @@ if jpegQuality < 1 or jpegQuality > 100:
     logging.info("Invalid JPEG quality argument: {}; please enter a value between 1 and 100 (inclusively)".format(jpegQuality))
     exit(-1)
 
+# Parameters for preprocessing dataset
+# All input images will be resized to (resizeDimension, resizeDimension), being stretched as required to do so
+# During training, a random (cropDimension, cropDimension) crop is taken of a randomly selected resized input image, and used as the training example
+# This procedure allows us to generate many "different" training examples for any given input image
+resizeDimension = 200
+cropDimension = 96
+
 # Load training dataset
 trainDataPaths = glob.glob(args.train_data_paths)
-trainDataset = dataset.PreprocessedImageDataset(xp=xp, useGpu=useGpu, jpegQuality=jpegQuality, dataPaths=trainDataPaths, targetSize=96, resizeTo=(300, 300))
+trainDataset = dataset.PreprocessedImageDataset(xp=xp, useGpu=useGpu, jpegQuality=jpegQuality, dataPaths=trainDataPaths,
+    targetSize=cropDimension, resizeTo=(resizeDimension, resizeDimension))
 
 # Create iterator to step through training data
 iterator = chainer.iterators.SerialIterator(trainDataset, batch_size=args.batch_size, repeat=True, shuffle=True)
