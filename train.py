@@ -62,7 +62,7 @@ if jpegQuality < 1 or jpegQuality > 100:
 # All input images will be resized to (resizeDimension, resizeDimension), being stretched as required to do so
 # During training, a random (cropDimension, cropDimension) crop is taken of a randomly selected resized input image, and used as the training example
 # This procedure allows us to generate many "different" training examples for any given input image
-resizeDimension = 200
+resizeDimension = 300
 cropDimension = 96
 
 # Load training dataset
