@@ -89,7 +89,6 @@ def generateOutputForInputImage(inputFilePath, outputFilePath, generatorModel):
     
     # Convert values as necessary and return the two images
     outputImage = outputImage.astype(numpy.uint8)
-    return outputImage
 
 
 # Evaluates a given image against a given baseline image
@@ -99,6 +98,10 @@ def evaluateImage(imageToEvaluate, baselineImage):
     return mse, ssim
 
 
+# Parse string argument to boolean
+def stringToBoolean(str):
+    return str.lower() in ("yes", "true", "t", "1")
+
 # Parse command-line arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("--models_directory_path", required=True)
@@ -106,9 +109,10 @@ parser.add_argument("--input_directory_path", required=True)
 parser.add_argument("--output_directory_path", required=True)
 parser.add_argument("--jpeg_quality_percent", type=int, default=10)
 parser.add_argument("--use_gpu", type=int, default=-1)
-parser.add_argument("--preprocess_only", type=bool, default=False)
-parser.add_argument("--skip_preprocessing", type=bool, default=False)
 parser.add_argument("--max_test_images", type=int, default=-1)
+parser.add_argument("--do_preprocessing", type=stringToBoolean, default=True)
+parser.add_argument("--do_output_generation", type=stringToBoolean, default=True)
+parser.add_argument("--do_performance_evaluation", type=stringToBoolean, default=True)
 args = parser.parse_args()
 
 # Determine computation engine (CPU or GPU)
@@ -128,9 +132,11 @@ inputDirectoryPath = args.input_directory_path
 outputDirectoryPath = args.output_directory_path
 jpegQualityPercent = args.jpeg_quality_percent
 modelDirectoryPath = args.models_directory_path
-preprocessOnly = args.preprocess_only
-skipPreprocessing = args.skip_preprocessing
 maxTestImages = args.max_test_images
+doPreprocessing = args.do_preprocessing
+doOutputGeneration = args.do_output_generation
+doPerformanceEvaluation = args.do_performance_evaluation
+
 
 # Get list of input images
 testFiles = os.listdir(inputDirectoryPath)
@@ -150,11 +156,13 @@ for testFileIndex, testFile in enumerate(testFiles):
     fileNameWithoutExtension = os.path.splitext(testFile)[0]
     fileNamesWithoutExtension.append(fileNameWithoutExtension)
 
-if skipPreprocessing == True:
+
+if doPreprocessing == False:
     print("Skipping preprocessing (flag set)")
 else:
     # Iterate over all test images and prepare original and input images
     print("Copying and transforming all original images to {}% JPEG quality inputs".format(jpegQualityPercent))
+    startTime = time.time()
     for testFileIndex, testFile in enumerate(testFiles):
         # Enforce max number of test images
         if testFileIndex == maxTestImages:
@@ -166,10 +174,12 @@ else:
         # Show progress updates at regular intervals
         printProgressUpdateAtInterval(testFileIndex + 1, len(testFiles), 100)
 
-# Exit here if doing only preprocessing
-if preprocessOnly:
-    print("Preprocessing complete, exiting (flag set)")
-    exit(0)
+    # Compute timing statistics
+    currentTime = time.time()
+    elapsedTime = currentTime - startTime
+    elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
+    print("  Time elapsed: {}".format(elapsedTimeString))
+
 
 # Get list of trained models
 modelFiles = os.listdir(modelDirectoryPath)
@@ -193,88 +203,129 @@ modelTrainingLevels.sort()
 if len(modelTrainingLevels) <= 0:
     print("Unable to find any valid trained models in directory specified")
     exit(-1)
-#modelTrainingLevels = modelTrainingLevels[:8] # TODO remove
-print("Found {} trained models to evaluate".format(len(modelTrainingLevels)))
 
-# Set up variables to collect statistics data
-originalFileSizes = numpy.zeros((len(fileNamesWithoutExtension)))
-inputFileSizes = numpy.zeros((len(fileNamesWithoutExtension)))
+# DEBUG: customize list of models to process
+#modelTrainingLevels = modelTrainingLevels[8:]
 
-outputFileSizes = numpy.zeros((len(fileNamesWithoutExtension), len(modelTrainingLevels)))
+print("Found {} trained models".format(len(modelTrainingLevels)))
+print("  Training levels: {}".format(modelTrainingLevels))
 
-mseOriginalInputs = numpy.zeros((len(fileNamesWithoutExtension)))
-ssimOriginalInputs = numpy.zeros((len(fileNamesWithoutExtension)))
+if doOutputGeneration == False:
+    print("Skipping output generation (flag set)")
+else:
+    # Generate output images for all models and input images
+    print("Beginning output generation with all models")
+    for modelIndex, modelTrainingLevel in enumerate(modelTrainingLevels):
+        # Load pre-trained generator model
+        print("Generating outputs for model {} of {}, with {}K training".format(modelIndex + 1, len(modelTrainingLevels), (modelTrainingLevel / 1000)))
+        generatorModel = models.Generator()
+        chainer.serializers.load_npz(os.path.join(modelDirectoryPath, generatorFileName(modelTrainingLevel)), generatorModel)
+        if useGpu >= 0:
+            generatorModel.to_gpu()
+        
+        # Iterate over all input images and gather statistics
+        startTime = time.time()
+        for imageIndex, fileNameWithoutExtension in enumerate(fileNamesWithoutExtension):
+            # Construct file paths for this image
+            originalFilePath = os.path.join(outputDirectoryPath, originalImageName(fileNameWithoutExtension))
+            inputFilePath = os.path.join(outputDirectoryPath, inputImageName(fileNameWithoutExtension, jpegQualityPercent))
+            outputFilePath = os.path.join(outputDirectoryPath, outputImageName(fileNameWithoutExtension, modelTrainingLevel))
+            
+            # Run the input image through the model and save output
+            generateOutputForInputImage(inputFilePath, outputFilePath, generatorModel)
 
-mseOriginalOutputs = numpy.zeros((len(fileNamesWithoutExtension), len(modelTrainingLevels)))
-ssimOriginalOutputs = numpy.zeros((len(fileNamesWithoutExtension), len(modelTrainingLevels)))
+            # Show progress updates at regular intervals
+            printProgressUpdateAtInterval(imageIndex + 1, len(fileNamesWithoutExtension), 100)
 
-# Determine statistics for original and input images
-print("Computing statistics between original and input images")
-for imageIndex, fileNameWithoutExtension in enumerate(fileNamesWithoutExtension):
-    # Construct file paths
-    originalFilePath = os.path.join(outputDirectoryPath, originalImageName(fileNameWithoutExtension))
-    inputFilePath = os.path.join(outputDirectoryPath, inputImageName(fileNameWithoutExtension, jpegQualityPercent))
-    
-    # Compute file sizes
-    originalFileSizes[imageIndex] = os.path.getsize(originalFilePath)
-    inputFileSizes[imageIndex] = os.path.getsize(inputFilePath)
-    
-    # Load images
-    originalImage = loadImageAndEnsure3Channels(originalFilePath)
-    inputImage = loadImageAndEnsure3Channels(inputFilePath)
-    
-    # Compute and save statistics
-    mse, ssim = evaluateImage(inputImage, originalImage)
-    mseOriginalInputs[imageIndex] = mse
-    ssimOriginalInputs[imageIndex] = ssim
+        # Compute timing statistics and print data
+        currentTime = time.time()
+        elapsedTime = currentTime - startTime
+        elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
+        print("  Time elapsed for this model: {}".format(elapsedTimeString))
 
-    # Show progress updates at regular intervals
-    printProgressUpdateAtInterval(imageIndex + 1, len(fileNamesWithoutExtension), 100)
 
-# Iterate over all models
-print("Beginning evaluation of models")
-for modelIndex, modelTrainingLevel in enumerate(modelTrainingLevels):
-    # Load pre-trained generator model
-    print("Evaluating model with " + str(modelTrainingLevel / 1000) + "K training")
-    generatorModel = models.Generator()
-    chainer.serializers.load_npz(os.path.join(modelDirectoryPath, generatorFileName(modelTrainingLevel)), generatorModel)
-    if useGpu >= 0:
-        generatorModel.to_gpu()
-    
-    # Iterate over all input images and gather statistics
+if doPerformanceEvaluation == False:
+    print("Skipping performance evaluation (flag set)")
+else:
+    # Set up variables to collect statistics data
+    originalFileSizes = numpy.zeros((len(fileNamesWithoutExtension)))
+    inputFileSizes = numpy.zeros((len(fileNamesWithoutExtension)))
+
+    outputFileSizes = numpy.zeros((len(fileNamesWithoutExtension), len(modelTrainingLevels)))
+
+    mseOriginalInputs = numpy.zeros((len(fileNamesWithoutExtension)))
+    ssimOriginalInputs = numpy.zeros((len(fileNamesWithoutExtension)))
+
+    mseOriginalOutputs = numpy.zeros((len(fileNamesWithoutExtension), len(modelTrainingLevels)))
+    ssimOriginalOutputs = numpy.zeros((len(fileNamesWithoutExtension), len(modelTrainingLevels)))
+
+    # Determine statistics for original and input images
+    print("Computing statistics between original and input images")
     startTime = time.time()
     for imageIndex, fileNameWithoutExtension in enumerate(fileNamesWithoutExtension):
-        # Construct file paths for this file
+        # Construct file paths
         originalFilePath = os.path.join(outputDirectoryPath, originalImageName(fileNameWithoutExtension))
         inputFilePath = os.path.join(outputDirectoryPath, inputImageName(fileNameWithoutExtension, jpegQualityPercent))
-        outputFilePath = os.path.join(outputDirectoryPath, outputImageName(fileNameWithoutExtension, modelTrainingLevel))
         
-        # Run the input image through the model and get output
-        outputImage = generateOutputForInputImage(inputFilePath, outputFilePath, generatorModel)
+        # Compute file sizes
+        originalFileSizes[imageIndex] = os.path.getsize(originalFilePath)
+        inputFileSizes[imageIndex] = os.path.getsize(inputFilePath)
         
-        # Evaluate output against original
+        # Load images
         originalImage = loadImageAndEnsure3Channels(originalFilePath)
-        mse, ssim = evaluateImage(outputImage, originalImage)
-        mseOriginalOutputs[imageIndex, modelIndex] = mse
-        ssimOriginalOutputs[imageIndex, modelIndex] = ssim
+        inputImage = loadImageAndEnsure3Channels(inputFilePath)
         
-        # Evaluate file size statistics
-        outputFileSize = os.path.getsize(outputFilePath)
-        outputFileSizes[imageIndex, modelIndex] = outputFileSize
+        # Compute and save statistics
+        mse, ssim = evaluateImage(inputImage, originalImage)
+        mseOriginalInputs[imageIndex] = mse
+        ssimOriginalInputs[imageIndex] = ssim
 
         # Show progress updates at regular intervals
         printProgressUpdateAtInterval(imageIndex + 1, len(fileNamesWithoutExtension), 100)
 
-    # Compute timing statistics and print data
+    # Compute timing statistics
     currentTime = time.time()
     elapsedTime = currentTime - startTime
     elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
-    print("  Time elapsed for this model: {}".format(elapsedTimeString))
+    print("  Time elapsed: {}".format(elapsedTimeString))
 
-# Save statistics data to file
-statsFilePath = os.path.join(outputDirectoryPath, "statistics.pkl")
-print("Saving statistics to file (in pickled format): {}".format(statsFilePath))
-with open(statsFilePath, "wb") as statsFile:
-    pickle.dump([fileNamesWithoutExtension, modelTrainingLevels, originalFileSizes, inputFileSizes, outputFileSizes,
-        mseOriginalInputs, ssimOriginalInputs, mseOriginalOutputs, ssimOriginalOutputs], statsFile)
+    # Compute performance statistics for all models and generated outputs
+    print("Beginning performance calculations with all models")
+    for modelIndex, modelTrainingLevel in enumerate(modelTrainingLevels):
+        # Iterate over all images and gather statistics
+        print("Evaluating performance of model {} of {}, with {}K training".format(modelIndex + 1, len(modelTrainingLevels), (modelTrainingLevel / 1000)))
+        startTime = time.time()
+        for imageIndex, fileNameWithoutExtension in enumerate(fileNamesWithoutExtension):
+            # Construct file paths for this image
+            originalFilePath = os.path.join(outputDirectoryPath, originalImageName(fileNameWithoutExtension))
+            outputFilePath = os.path.join(outputDirectoryPath, outputImageName(fileNameWithoutExtension, modelTrainingLevel))
+            
+            # Load original and output images
+            originalImage = loadImageAndEnsure3Channels(originalFilePath)
+            outputImage = loadImageAndEnsure3Channels(outputFilePath)
+            
+            # Evaluate output against original
+            mse, ssim = evaluateImage(outputImage, originalImage)
+            mseOriginalOutputs[imageIndex, modelIndex] = mse
+            ssimOriginalOutputs[imageIndex, modelIndex] = ssim
+            
+            # Evaluate file size statistics
+            outputFileSize = os.path.getsize(outputFilePath)
+            outputFileSizes[imageIndex, modelIndex] = outputFileSize
+
+            # Show progress updates at regular intervals
+            printProgressUpdateAtInterval(imageIndex + 1, len(fileNamesWithoutExtension), 100)
+
+        # Compute timing statistics
+        currentTime = time.time()
+        elapsedTime = currentTime - startTime
+        elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
+        print("  Time elapsed for this model: {}".format(elapsedTimeString))
+
+    # Save statistics data to file
+    statsFilePath = os.path.join(outputDirectoryPath, "statistics.pkl")
+    print("Saving statistics to file (in pickled format): {}".format(statsFilePath))
+    with open(statsFilePath, "wb") as statsFile:
+        pickle.dump([fileNamesWithoutExtension, modelTrainingLevels, originalFileSizes, inputFileSizes, outputFileSizes,
+            mseOriginalInputs, ssimOriginalInputs, mseOriginalOutputs, ssimOriginalOutputs], statsFile)
 
