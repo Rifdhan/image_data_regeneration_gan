@@ -1,3 +1,4 @@
+import logging
 import argparse
 import chainer
 import numpy
@@ -33,7 +34,7 @@ def outputImageName(fileNameWithoutExtension, modelTrainingLevel):
 # Prints a progress update to console at a specified interval
 def printProgressUpdateAtInterval(nComplete, nTotal, interval):
     if (nComplete % interval) == 0:
-        print("  {} of {} complete ({}%)".format(nComplete, nTotal, str(round(100.0 * nComplete / nTotal, 2))))
+        logging.info("  {} of {} complete ({}%)".format(nComplete, nTotal, str(round(100.0 * nComplete / nTotal, 2))))
 
 
 # Loads an image and ensures it has 3 colour channels
@@ -115,16 +116,22 @@ parser.add_argument("--do_output_generation", type=stringToBoolean, default=True
 parser.add_argument("--do_performance_evaluation", type=stringToBoolean, default=True)
 args = parser.parse_args()
 
+# Start logging
+logging.basicConfig(filename="test_batch_log.txt", level=logging.INFO)
+logging.getLogger("").addHandler(logging.StreamHandler())
+logging.info("Using configuration:")
+logging.info(args)
+
 # Determine computation engine (CPU or GPU)
 useGpu = args.use_gpu
 if useGpu >= 0:
-    print("Using GPU with ID {} for compute".format(useGpu))
-    print("  cuda support enabled: {}".format(chainer.cuda.available))
-    print("  cudnn support enabled: {}".format(chainer.cuda.cudnn_enabled))
+    logging.info("Using GPU with ID {} for compute".format(useGpu))
+    logging.info("  cuda support enabled: {}".format(chainer.cuda.available))
+    logging.info("  cudnn support enabled: {}".format(chainer.cuda.cudnn_enabled))
     chainer.cuda.get_device(useGpu).use()
     xp = chainer.cuda.cupy
 else:
-    print("Using CPU for compute")
+    logging.info("Using CPU for compute")
     xp = numpy
 
 # Parse directories and other parameters
@@ -141,9 +148,9 @@ doPerformanceEvaluation = args.do_performance_evaluation
 # Get list of input images
 testFiles = os.listdir(inputDirectoryPath)
 if len(testFiles) <= 0:
-    print("Unable to find any input images in directory specified")
+    logging.info("Unable to find any input images in directory specified")
     exit(-1)
-print("Found {} test images".format(len(testFiles)))
+logging.info("Found {} test images".format(len(testFiles)))
 
 # Get all test image file names without extension
 fileNamesWithoutExtension = []
@@ -158,10 +165,10 @@ for testFileIndex, testFile in enumerate(testFiles):
 
 
 if doPreprocessing == False:
-    print("Skipping preprocessing (flag set)")
+    logging.info("Skipping preprocessing (flag set)")
 else:
     # Iterate over all test images and prepare original and input images
-    print("Copying and transforming all original images to {}% JPEG quality inputs".format(jpegQualityPercent))
+    logging.info("Copying and transforming all original images to {}% JPEG quality inputs".format(jpegQualityPercent))
     startTime = time.time()
     for testFileIndex, testFile in enumerate(testFiles):
         # Enforce max number of test images
@@ -178,13 +185,13 @@ else:
     currentTime = time.time()
     elapsedTime = currentTime - startTime
     elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
-    print("  Time elapsed: {}".format(elapsedTimeString))
+    logging.info("  Time elapsed: {}".format(elapsedTimeString))
 
 
 # Get list of trained models
 modelFiles = os.listdir(modelDirectoryPath)
 if len(modelFiles) <= 0:
-    print("Unable to find any model files in directory specified")
+    logging.info("Unable to find any model files in directory specified")
     exit(-1)
 
 # Determine what models exist to be tested
@@ -201,23 +208,24 @@ for modelFile in modelFiles:
 # Sort by training level
 modelTrainingLevels.sort()
 if len(modelTrainingLevels) <= 0:
-    print("Unable to find any valid trained models in directory specified")
+    logging.info("Unable to find any valid trained models in directory specified")
     exit(-1)
 
 # DEBUG: customize list of models to process
-#modelTrainingLevels = modelTrainingLevels[8:]
+modelTrainingLevels = modelTrainingLevels[:40]
 
-print("Found {} trained models".format(len(modelTrainingLevels)))
-print("  Training levels: {}".format(modelTrainingLevels))
+logging.info("Found {} trained models".format(len(modelTrainingLevels)))
+logging.info("  Training levels: {}".format(modelTrainingLevels))
+
 
 if doOutputGeneration == False:
-    print("Skipping output generation (flag set)")
+    logging.info("Skipping output generation (flag set)")
 else:
     # Generate output images for all models and input images
-    print("Beginning output generation with all models")
+    logging.info("Beginning output generation with all models")
     for modelIndex, modelTrainingLevel in enumerate(modelTrainingLevels):
         # Load pre-trained generator model
-        print("Generating outputs for model {} of {}, with {}K training".format(modelIndex + 1, len(modelTrainingLevels), (modelTrainingLevel / 1000)))
+        logging.info("Generating outputs for model {} of {}, with {}K training".format(modelIndex + 1, len(modelTrainingLevels), (modelTrainingLevel / 1000)))
         generatorModel = models.Generator()
         chainer.serializers.load_npz(os.path.join(modelDirectoryPath, generatorFileName(modelTrainingLevel)), generatorModel)
         if useGpu >= 0:
@@ -241,11 +249,11 @@ else:
         currentTime = time.time()
         elapsedTime = currentTime - startTime
         elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
-        print("  Time elapsed for this model: {}".format(elapsedTimeString))
+        logging.info("  Time elapsed for this model: {}".format(elapsedTimeString))
 
 
 if doPerformanceEvaluation == False:
-    print("Skipping performance evaluation (flag set)")
+    logging.info("Skipping performance evaluation (flag set)")
 else:
     # Set up variables to collect statistics data
     originalFileSizes = numpy.zeros((len(fileNamesWithoutExtension)))
@@ -260,7 +268,7 @@ else:
     ssimOriginalOutputs = numpy.zeros((len(fileNamesWithoutExtension), len(modelTrainingLevels)))
 
     # Determine statistics for original and input images
-    print("Computing statistics between original and input images")
+    logging.info("Computing statistics between original and input images")
     startTime = time.time()
     for imageIndex, fileNameWithoutExtension in enumerate(fileNamesWithoutExtension):
         # Construct file paths
@@ -287,13 +295,13 @@ else:
     currentTime = time.time()
     elapsedTime = currentTime - startTime
     elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
-    print("  Time elapsed: {}".format(elapsedTimeString))
+    logging.info("  Time elapsed: {}".format(elapsedTimeString))
 
     # Compute performance statistics for all models and generated outputs
-    print("Beginning performance calculations with all models")
+    logging.info("Beginning performance calculations with all models")
     for modelIndex, modelTrainingLevel in enumerate(modelTrainingLevels):
         # Iterate over all images and gather statistics
-        print("Evaluating performance of model {} of {}, with {}K training".format(modelIndex + 1, len(modelTrainingLevels), (modelTrainingLevel / 1000)))
+        logging.info("Evaluating performance of model {} of {}, with {}K training".format(modelIndex + 1, len(modelTrainingLevels), (modelTrainingLevel / 1000)))
         startTime = time.time()
         for imageIndex, fileNameWithoutExtension in enumerate(fileNamesWithoutExtension):
             # Construct file paths for this image
@@ -320,11 +328,11 @@ else:
         currentTime = time.time()
         elapsedTime = currentTime - startTime
         elapsedTimeString = time.strftime("%H:%M:%S", time.gmtime(elapsedTime))
-        print("  Time elapsed for this model: {}".format(elapsedTimeString))
+        logging.info("  Time elapsed for this model: {}".format(elapsedTimeString))
 
     # Save statistics data to file
     statsFilePath = os.path.join(outputDirectoryPath, "statistics.pkl")
-    print("Saving statistics to file (in pickled format): {}".format(statsFilePath))
+    logging.info("Saving statistics to file (in pickled format): {}".format(statsFilePath))
     with open(statsFilePath, "wb") as statsFile:
         pickle.dump([fileNamesWithoutExtension, modelTrainingLevels, originalFileSizes, inputFileSizes, outputFileSizes,
             mseOriginalInputs, ssimOriginalInputs, mseOriginalOutputs, ssimOriginalOutputs], statsFile)

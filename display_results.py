@@ -63,11 +63,11 @@ def graphMetricVsMetric(xValues, yValues, legendLabels=None, xLabel=None, yLabel
     if legendLabels is not None:
         # Multiple points with legend
         for xValue, yValue, legendLabel in zip(xValues, yValues, legendLabels):
-            plt.scatter(xValue, yValue, label=legendLabel)
+            plt.scatter(xValue, yValue, label=legendLabel, s=4)
         plt.legend(loc="upper right")
     else:
         # Multiple points without legend
-        plt.scatter(xValues, yValues)
+        plt.scatter(xValues, yValues, s=4)
     
     # Add labels/decorations and display graph
     plt.grid()
@@ -121,7 +121,7 @@ ssimOriginalOutputsWithZero = numpy.hstack((ssimOriginalInputs.reshape((-1, 1)),
 
 # Show selected graphs
 print("Beginning statistics visualizations")
-showAll = False
+showAll = True
 
 # MSE/SSIM vs training examples
 

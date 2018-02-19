@@ -27,7 +27,7 @@ outputDirectory = args.model_output_path
 os.makedirs(outputDirectory)
 
 # Start logging
-logging.basicConfig(filename=os.path.join(outputDirectory, "log.txt"), level=logging.DEBUG)
+logging.basicConfig(filename=os.path.join(outputDirectory, "log.txt"), level=logging.INFO)
 logging.getLogger("").addHandler(logging.StreamHandler())
 logging.info("Using configuration:")
 logging.info(args)

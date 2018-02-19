@@ -1,6 +1,6 @@
 # Dejpeg GAN
 
-Chainer implementation of a GAN for anti-JPEG data recovery.
+Chainer implementation of a GAN for recovery of data lost during JPEG compression.
 Adapted from superresolution model: https://github.com/Hi-king/superresolution_gan
 
 
@@ -31,7 +31,7 @@ Note: you may omit the output_path argument and the results will be displayed in
 ### Testing Batches of Test Images with Multiple Models
 
 ```
-python test_batch.py --models_directory_path "/path/to/models/directory" --input_directory_path "/path/to/test/images" --output_directory_path "/path/to/output/generated/images"
+python test_batch.py --models_directory_path "/path/to/models/directory" --input_directory_path "/path/to/test/images" --output_directory_path "/path/to/output/generated/images" --use_gpu=0
 ```
 Note: consists of 3 steps: preprocessing original images to input images, then generating all model output images, then computing statistics across all images. Additional flags are available to skip any step(s) in the process: --do_preprocessing=true, --do_output_generation=true, --do_performance_evaluation=true
 
