@@ -17,6 +17,7 @@ parser.add_argument("--train_data_paths", required=True)
 parser.add_argument("--model_output_path", required=True)
 parser.add_argument("--use_gpu", type=int, default=-1)
 parser.add_argument("--jpeg_quality", type=int, default=10)
+parser.add_argument("--max_training_examples", type=int, default=-1)
 parser.add_argument("--batch_size", type=int, default=16)
 parser.add_argument("--loss_adversarial_coefficient", type=float, default=0.00001)
 parser.add_argument("--loss_mse_coefficient", type=float, default=0.0001)
@@ -86,6 +87,9 @@ discriminatorOptimizer = chainer.optimizers.Adam()
 discriminatorOptimizer.setup(discriminator)
 if useGpu >= 0:
     discriminator.to_gpu()
+
+# Determine maximum number of training examples to view
+maxTrainingExamples = args.max_training_examples
 
 # Determine coefficients for measuring loss
 lossMseCoefficient = args.loss_mse_coefficient
@@ -185,4 +189,9 @@ for example in iterator:
         savePath = os.path.join(outputDirectory, "generator_{}_examples.npz".format(nExamplesSeen))
         logging.info("saving trained model: {}".format(savePath))
         chainer.serializers.save_npz(savePath, generator)
+    
+    # Determine if we should stop training
+    if maxTrainingExamples > 0 and nExamplesSeen >= maxTrainingExamples:
+        logging.info("seen {} examples; exiting (flag set)".format(nExamplesSeen))
+        break
 
