@@ -40,7 +40,8 @@ def printProgressUpdateAtInterval(nComplete, nTotal, interval):
 # Loads an image and ensures it has 3 colour channels
 def loadImageAndEnsure3Channels(filePath):
     # Load image from file
-    inputImage = numpy.array(Image.open(filePath))
+    with Image.open(filePath) as inputFile:
+        inputImage = numpy.array(inputFile, dtype=numpy.uint8)
 
     # If monochrome, duplicate single channel 3 times to get RGB
     if len(inputImage.shape) == 2:
@@ -54,12 +55,14 @@ def loadImageAndEnsure3Channels(filePath):
 
 
 # Prepares a given test image for testing, creating the original and input files
-def prepareTestImage(testImageFilename, inputDirectoryPath, outputDirectoryPath, jpegQualityPercent):
+def prepareTestImage(testImageFilename, inputDirectoryPath, outputDirectoryPath, scalePercent, jpegQualityPercent):
     # Copy original file to output directory, converting it to PNG
     fileNameWithoutExtension = os.path.splitext(testImageFilename)[0]
     testFilePath = os.path.join(inputDirectoryPath, testImageFilename)
     originalFilePath = os.path.join(outputDirectoryPath, originalImageName(fileNameWithoutExtension))
     os.system("convert " + testFilePath + " " + originalFilePath + " > /dev/null 2>&1")
+    if scalePercent != 100:
+        os.system("mogrify -resize " + str(scalePercent) + "% " + originalFilePath + " > /dev/null 2>&1")
 
     # Compress original file to desired JPEG quality, creating input file
     inputFilePath = os.path.join(outputDirectoryPath, inputImageName(fileNameWithoutExtension, jpegQualityPercent))
@@ -108,7 +111,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--models_directory_path", required=True)
 parser.add_argument("--input_directory_path", required=True)
 parser.add_argument("--output_directory_path", required=True)
+parser.add_argument("--log_file_path", default="test_batch_log.txt")
 parser.add_argument("--jpeg_quality_percent", type=int, default=10)
+parser.add_argument("--scale_percent", type=int, default=100)
 parser.add_argument("--use_gpu", type=int, default=-1)
 parser.add_argument("--max_test_images", type=int, default=-1)
 parser.add_argument("--do_preprocessing", type=stringToBoolean, default=True)
@@ -117,7 +122,7 @@ parser.add_argument("--do_performance_evaluation", type=stringToBoolean, default
 args = parser.parse_args()
 
 # Start logging
-logging.basicConfig(filename="test_batch_log.txt", level=logging.INFO)
+logging.basicConfig(filename=args.log_file_path, level=logging.INFO)
 logging.getLogger("").addHandler(logging.StreamHandler())
 logging.info("Using configuration:")
 logging.info(args)
@@ -138,6 +143,7 @@ else:
 inputDirectoryPath = args.input_directory_path
 outputDirectoryPath = args.output_directory_path
 jpegQualityPercent = args.jpeg_quality_percent
+scalePercent = args.scale_percent
 modelDirectoryPath = args.models_directory_path
 maxTestImages = args.max_test_images
 doPreprocessing = args.do_preprocessing
@@ -168,7 +174,7 @@ if doPreprocessing == False:
     logging.info("Skipping preprocessing (flag set)")
 else:
     # Iterate over all test images and prepare original and input images
-    logging.info("Copying and transforming all original images to {}% JPEG quality inputs".format(jpegQualityPercent))
+    logging.info("Copying and transforming all original images to {}% scale and {}% JPEG quality inputs".format(scalePercent, jpegQualityPercent))
     startTime = time.time()
     for testFileIndex, testFile in enumerate(testFiles):
         # Enforce max number of test images
@@ -176,7 +182,7 @@ else:
             break
 
         # Make a PNG copy of the original image and preprocess a compressed input image
-        prepareTestImage(testFile, inputDirectoryPath, outputDirectoryPath, jpegQualityPercent)
+        prepareTestImage(testFile, inputDirectoryPath, outputDirectoryPath, scalePercent, jpegQualityPercent)
         
         # Show progress updates at regular intervals
         printProgressUpdateAtInterval(testFileIndex + 1, len(testFiles), 100)
@@ -212,7 +218,7 @@ if len(modelTrainingLevels) <= 0:
     exit(-1)
 
 # DEBUG: customize list of models to process
-modelTrainingLevels = modelTrainingLevels[:40]
+modelTrainingLevels = modelTrainingLevels[int(16/16)-1:int(640/16)]
 
 logging.info("Found {} trained models".format(len(modelTrainingLevels)))
 logging.info("  Training levels: {}".format(modelTrainingLevels))
@@ -336,4 +342,6 @@ else:
     with open(statsFilePath, "wb") as statsFile:
         pickle.dump([fileNamesWithoutExtension, modelTrainingLevels, originalFileSizes, inputFileSizes, outputFileSizes,
             mseOriginalInputs, ssimOriginalInputs, mseOriginalOutputs, ssimOriginalOutputs], statsFile)
+
+logging.info("Finished; exiting")
 
