@@ -1,6 +1,6 @@
 # Dejpeg GAN
 
-Chainer implementation of a GAN for recovery of data lost during JPEG compression.
+Chainer implementation of a GAN for recovery of data lost during JPEG compression. Also includes batch testing and statistics collection scripts, and a script to visualize this data in graphs and numbers.
 Adapted from superresolution model: https://github.com/Hi-king/superresolution_gan
 
 
@@ -23,10 +23,16 @@ Note: cupy must be installed and set up. You will need to identify your GPU devi
 ### Testing Individual Images with Individual Models
 
 ```
-python test.py --model_path "/path/to/model.npz" --input_path "/path/to/input/image.jpg" --output_path "/path/to/output/image.png"
+python test.py --model_path "/path/to/model.npz" --input_path "/path/to/input/image.jpg" --output_path "/path/to/output/image.png" --use_gpu=0
 ```
 Note: you may omit the output_path argument and the results will be displayed in a window instead.
 
+
+### Testing Individual Images with Multiple Models
+
+```
+python test_single.py --models_directory_path "/path/to/models/directory" --input_file_path "/path/to/input/image.jpg" --output_directory_path "/path/to/output/generated/images" --use_gpu=0
+```
 
 ### Testing Batches of Test Images with Multiple Models
 
