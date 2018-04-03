@@ -1,7 +1,20 @@
 import argparse
 import numpy
 import pickle
+import matplotlib
 import matplotlib.pyplot as plt
+
+
+# Font size parameters for graphs
+TITLE_FONT_SIZE = 28
+LABEL_FONT_SIZE = 22
+BODY_FONT_SIZE = 18
+
+matplotlib.rcParams.update({"font.size": BODY_FONT_SIZE})
+
+# Ensure graph windows are maximized
+manager = plt.get_current_fig_manager()
+manager.resize(*manager.window.maxsize())
 
 
 # Print averages to console
@@ -17,12 +30,23 @@ def printAverages():
     avgInputFileSize = numpy.mean(inputFileSizes, axis=0)
     avgOutputFileSize = numpy.mean(outputFileSizes, axis=0)
     
+    # Computer other statistics
+    print(ssimScores[:, -1])
+    nNegativeSsimScore = sum(ssimScores[:, -1] < 0)
+    
+    indexOfHighestSsimScore = numpy.argmax(ssimScores[:, -1])
+    indexOfLowestSsimScore = numpy.argmin(ssimScores[:, -1])
+    
     # Print statistics
     print("  Average change in MSE: {}".format(avgMseOriginalOutput - avgMseOriginalInput))
     print("  Average change in SSIM: {}".format(avgSsimOriginalOutput - avgSsimOriginalInput))
     print("  Average original file size: {} KB".format(avgOriginalFileSize / 1000))
     print("  Average input file size: {} KB".format(avgInputFileSize / 1000))
     print("  Average output file size: {} KB".format(avgOutputFileSize / 1000))
+    print("  Output images with negative SSIM Scores after {}K training: {}/{} ({}%)".format(modelTrainingLevels[-1] / 1000,
+        nNegativeSsimScore, len(fileNamesWithoutExtension), nNegativeSsimScore / len(fileNamesWithoutExtension) * 100))
+    print("  Output image with highest SSIM Score: {} (Score of {})".format(fileNamesWithoutExtension[indexOfHighestSsimScore], ssimScores[indexOfHighestSsimScore, -1]))
+    print("  Output image with lowest SSIM Score: {} (Score of {})".format(fileNamesWithoutExtension[indexOfLowestSsimScore], ssimScores[indexOfLowestSsimScore, -1]))
 
 # Show chart with metric vs training level, supporting multiple graphs on the same axes
 def graphMetricVsTraining(xValues, yValues, xTicks=None, legendLabels=None, xLabel=None, yLabel=None, title=None):
@@ -34,7 +58,7 @@ def graphMetricVsTraining(xValues, yValues, xTicks=None, legendLabels=None, xLab
         # Multiple plots with legend
         for yValuesRow, legendLabel in zip(yValues, legendLabels):
             plt.plot(xValues, yValuesRow, label=legendLabel)
-        plt.legend(loc="upper right")
+        plt.legend(loc="lower right")
     else:
         # Multiple plots without legend
         for yValuesRow in yValues:
@@ -42,19 +66,21 @@ def graphMetricVsTraining(xValues, yValues, xTicks=None, legendLabels=None, xLab
     
     # Add labels/decorations and display graph
     if xTicks is None:
-        plt.xticks(xValues)
+        plt.xticks(xValues, rotation=90)
     else:
         plt.xticks(numpy.arange(len(xTicks)), xTicks)
     
     plt.grid()
+    plt.margins(0.02)
     
     if xLabel is not None:
-        plt.xlabel(xLabel)
+        plt.xlabel(xLabel, fontsize=LABEL_FONT_SIZE)
     if yLabel is not None:
-        plt.ylabel(yLabel)
+        plt.ylabel(yLabel, fontsize=LABEL_FONT_SIZE)
     if title is not None:
-        plt.title(title)
+        plt.title(title, fontsize=TITLE_FONT_SIZE)
     
+    plt.subplots_adjust(left=0.085, right=0.985, top=0.935, bottom=0.125)
     plt.show()
 
 # Show scatter plot with metric vs metric
@@ -64,21 +90,23 @@ def graphMetricVsMetric(xValues, yValues, legendLabels=None, xLabel=None, yLabel
         # Multiple points with legend
         for xValue, yValue, legendLabel in zip(xValues, yValues, legendLabels):
             plt.scatter(xValue, yValue, label=legendLabel, s=4)
-        plt.legend(loc="upper right")
+        plt.legend(loc="lower right")
     else:
         # Multiple points without legend
         plt.scatter(xValues, yValues, s=4)
     
     # Add labels/decorations and display graph
     plt.grid()
+    plt.margins(0.02)
     
     if xLabel is not None:
-        plt.xlabel(xLabel)
+        plt.xlabel(xLabel, fontsize=LABEL_FONT_SIZE)
     if yLabel is not None:
-        plt.ylabel(yLabel)
+        plt.ylabel(yLabel, fontsize=LABEL_FONT_SIZE)
     if title is not None:
-        plt.title(title)
+        plt.title(title, fontsize=TITLE_FONT_SIZE)
     
+    plt.subplots_adjust(left=0.085, right=0.985, top=0.935, bottom=0.125)
     plt.show()
 
 # Parse command-line arguments
@@ -122,6 +150,9 @@ ssimOriginalOutputsWithZero = numpy.hstack((ssimOriginalInputs.reshape((-1, 1)),
 # Show selected graphs
 print("Beginning statistics visualizations")
 showAll = True
+
+if True or showAll:
+    printAverages()
 
 # MSE/SSIM vs training examples
 
@@ -222,7 +253,7 @@ if False or showAll:
 if False or showAll:
     graphMetricVsMetric(
         xValues=(inputFileSizes / 1000),
-        yValues=(ssimOriginalOutputs[:, 0]),
+        yValues=(ssimOriginalOutputs[:, -1]),
         xLabel="Input File Size (KB)",
         yLabel="SSIM Value ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Value vs Input File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -231,7 +262,7 @@ if False or showAll:
 if False or showAll:
     graphMetricVsMetric(
         xValues=(inputFileSizes / 1000),
-        yValues=(ssimScores[:, 0]),
+        yValues=(ssimScores[:, -1]),
         xLabel="Input File Size (KB)",
         yLabel="SSIM Score ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Score vs Input File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -239,8 +270,8 @@ if False or showAll:
 # All individual test images, output file size vs SSIM
 if False or showAll:
     graphMetricVsMetric(
-        xValues=(outputFileSizes[:, 0] / 1000),
-        yValues=(ssimOriginalOutputs[:, 0]),
+        xValues=(outputFileSizes[:, -1] / 1000),
+        yValues=(ssimOriginalOutputs[:, -1]),
         xLabel="Output File Size (KB) ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="SSIM Value ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Value vs Output File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -248,8 +279,8 @@ if False or showAll:
 # All individual test images, output file size vs SSIM
 if False or showAll:
     graphMetricVsMetric(
-        xValues=(outputFileSizes[:, 0] / 1000),
-        yValues=(ssimScores[:, 0]),
+        xValues=(outputFileSizes[:, -1] / 1000),
+        yValues=(ssimScores[:, -1]),
         xLabel="Output File Size (KB) ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="SSIM Score ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Score vs Output File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -257,8 +288,8 @@ if False or showAll:
 # All individual test images, output file size vs MSE
 if False or showAll:
     graphMetricVsMetric(
-        xValues=(outputFileSizes[:, 0] / 1000),
-        yValues=(mseOriginalOutputs[:, 0]),
+        xValues=(outputFileSizes[:, -1] / 1000),
+        yValues=(mseOriginalOutputs[:, -1]),
         xLabel="Output File Size (KB) ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="MSE ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="MSE vs Output File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -268,8 +299,8 @@ if False or showAll:
 # All individual test images, change in file size from original to output image vs SSIM
 if False or showAll:
     graphMetricVsMetric(
-        xValues=((outputFileSizes[:, 0] - originalFileSizes) / 1000),
-        yValues=(ssimOriginalOutputs[:, 0]),
+        xValues=((outputFileSizes[:, -1] - originalFileSizes) / 1000),
+        yValues=(ssimOriginalOutputs[:, -1]),
         xLabel="Change in File Size from Original to Output Image (KB) ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="SSIM Value ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Value vs Change in File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -277,8 +308,8 @@ if False or showAll:
 # All individual test images, change in file size from original to output image vs SSIM
 if False or showAll:
     graphMetricVsMetric(
-        xValues=((outputFileSizes[:, 0] - originalFileSizes) / 1000),
-        yValues=(ssimScores[:, 0]),
+        xValues=((outputFileSizes[:, -1] - originalFileSizes) / 1000),
+        yValues=(ssimScores[:, -1]),
         xLabel="Change in File Size from Original to Output Image (KB) ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="SSIM Score ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Score vs Change in File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -286,8 +317,8 @@ if False or showAll:
 # All individual test images, change in file size from original to output image vs MSE
 if False or showAll:
     graphMetricVsMetric(
-        xValues=((outputFileSizes[:, 0] - originalFileSizes) / 1000),
-        yValues=(mseOriginalOutputs[:, 0]),
+        xValues=((outputFileSizes[:, -1] - originalFileSizes) / 1000),
+        yValues=(mseOriginalOutputs[:, -1]),
         xLabel="Change in File Size from Original to Output Image (KB) ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="MSE ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="MSE vs Change in File Size for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -297,8 +328,8 @@ if False or showAll:
 # All individual test images, SSIM value vs MSE
 if False or showAll:
     graphMetricVsMetric(
-        xValues=(mseOriginalOutputs[:, 0] / 1000),
-        yValues=(ssimOriginalOutputs[:, 0]),
+        xValues=(mseOriginalOutputs[:, -1] / 1000),
+        yValues=(ssimOriginalOutputs[:, -1]),
         xLabel="MSE ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="SSIM Value ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Value vs MSE for {} Test Images".format(len(fileNamesWithoutExtension)))
@@ -306,8 +337,8 @@ if False or showAll:
 # All individual test images, SSIM score vs MSE
 if False or showAll:
     graphMetricVsMetric(
-        xValues=(mseOriginalOutputs[:, 0] / 1000),
-        yValues=(ssimScores[:, 0]),
+        xValues=(mseOriginalOutputs[:, -1] / 1000),
+        yValues=(ssimScores[:, -1]),
         xLabel="MSE ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         yLabel="SSIM Score ({}K Training)".format(modelTrainingLevels[-1] / 1000),
         title="SSIM Score vs MSE for {} Test Images".format(len(fileNamesWithoutExtension)))
